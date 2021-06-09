@@ -40,6 +40,9 @@ namespace Morphic.Server.Email
         /// The default 'name' we use to send emails.
         /// </summary>
         public string EmailFromFullname { get; set; } = "Morphic Support";
+
+        public string? InternalAlertEmail { get; set; }
+
         /// <summary>
         /// Some SendGrid settings.
         /// </summary>

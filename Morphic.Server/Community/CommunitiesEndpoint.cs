@@ -26,6 +26,11 @@ using System.Threading.Tasks;
 using System;
 using System.Text.Json.Serialization;
 using System.Collections.Generic;
+using System.Text;
+using Hangfire;
+using MongoDB.Bson;
+using MongoDB.Bson.IO;
+using Morphic.Server.Email;
 using Stripe;
 
 namespace Morphic.Server.Community
@@ -39,10 +44,13 @@ namespace Morphic.Server.Community
     public class CommunitiesEndpoint: Endpoint
     {
 
-        public CommunitiesEndpoint(IPaymentProcessor paymentProcessor, Plans plans, IHttpContextAccessor contextAccessor, ILogger<Endpoint> logger): base(contextAccessor, logger)
+        public CommunitiesEndpoint(IPaymentProcessor paymentProcessor, Plans plans,
+            IHttpContextAccessor contextAccessor, ILogger<Endpoint> logger, IBackgroundJobClient jobClient)
+            : base(contextAccessor, logger)
         {
             this.paymentProcessor = paymentProcessor;
             this.plans = plans;
+            this.jobClient = jobClient;
         }
 
         public override async Task LoadResource()
@@ -53,6 +61,7 @@ namespace Morphic.Server.Community
         private User User = null!;
         private IPaymentProcessor paymentProcessor;
         private Plans plans;
+        private readonly IBackgroundJobClient jobClient;
 
         [Method]
         public async Task Post()
@@ -195,6 +204,24 @@ namespace Morphic.Server.Community
             member.FirstName.PlainText = User.FirstName?.PlainText;
             member.LastName.PlainText = User.LastName?.PlainText;
             await db.Save(member);
+
+
+            // Send an email alert when someone signs up
+            StringBuilder emailInfo = new StringBuilder();
+            JsonWriterSettings writerSettings = new JsonWriterSettings()
+            {
+                Indent = true
+            };
+
+            emailInfo.AppendFormat("Community '{0}' created by '{1}' {2}",
+                community.Name, User.FullName, User.Email.PlainText).AppendLine();
+
+            emailInfo.AppendLine("Member:").AppendLine(member.ToJson(writerSettings));
+            emailInfo.AppendLine("Community:").AppendLine(community.ToJson(writerSettings));
+
+            jobClient.Enqueue<InternalAlertEmail>(x =>
+                x.SendEmail("new community", emailInfo.ToString(), this.Request.ClientIp()));
+
 
             await Respond(new CommunityPutResponse()
             {
