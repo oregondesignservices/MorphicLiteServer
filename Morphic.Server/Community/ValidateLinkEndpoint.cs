@@ -188,6 +188,11 @@ namespace Morphic.Server.Community
                 req.Timeout = 10000;
                 req.KeepAlive = false;
 
+                // Ignoring certificate errors. No data is being sent or received, and only checking the link
+                // validity, so the user's browser will catch this error anyway. This is to stop a false
+                // negative on hostnames containing an underscore, in addition to temporal problems.
+                req.ServerCertificateValidationCallback += (sender, certificate, chain, errors) => true;
+
                 foreach ((string key, string value) in headers)
                 {
                     req.Headers[key] = value;
